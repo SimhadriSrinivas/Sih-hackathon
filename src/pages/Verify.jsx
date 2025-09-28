@@ -1,8 +1,9 @@
+// src/pages/Verify.jsx
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useState } from "react";
 import { KeyRound } from "lucide-react";
 import { OTPInput } from "../components/OTPInput";
-import { account } from "../lib/appwrite";
+import { account, databases, Query } from "../lib/appwrite";
 
 export default function Verify() {
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
@@ -10,7 +11,7 @@ export default function Verify() {
   const [error, setError] = useState(null);
 
   const [searchParams] = useSearchParams();
-  const userId = searchParams.get("userId");
+  const userId = searchParams.get("userId"); // Appwrite user ID
   const type = searchParams.get("type");
   const userType = searchParams.get("userType");
 
@@ -29,21 +30,47 @@ export default function Verify() {
 
     try {
       console.log("Verifying with userId:", userId, "otp:", otpString);
-      // Log out any active session before verifying
+
+      // 🔹 Safe logout: wrap in try/catch
       try {
         await account.deleteSession("current");
       } catch (logoutErr) {
-        // Ignore if no session exists
+        console.warn("No active session to delete:", logoutErr.message);
       }
+
       if (!userId || !otpString) {
         setError("Missing userId or OTP. Please restart the sign-in process.");
         setIsLoading(false);
         return;
       }
+
+      // 🔹 Create session using Appwrite
       const session = await account.createSession(userId, otpString);
+
       if (session && session.userId) {
         if (userType === "clinic") {
-          navigate("/clinics/ClinicSignup.jsx", { replace: true });
+          // 🔹 Look for existing clinic linked to this user
+          try {
+            const dbId = import.meta.env.VITE_APPWRITE_DATABASE_ID;
+            const collectionId = import.meta.env.VITE_APPWRITE_COLLECTION_ID;
+
+            // IMPORTANT: Replace 'ownerId' with the correct field in your Clinic collection
+            const res = await databases.listDocuments(dbId, collectionId, [
+              Query.equal("ownerId", session.userId),
+            ]);
+
+            const foundClinic = res.documents.length > 0;
+            if (foundClinic) {
+              // Save clinic ID in localStorage for dashboard
+              window.localStorage.setItem("clinicId", res.documents[0].$id);
+              navigate("/clinics/doctordashbord", { replace: true });
+            } else {
+              navigate("/clinics/signup", { replace: true });
+            }
+          } catch (clinicErr) {
+            console.error("Error checking clinic:", clinicErr.message);
+            navigate("/clinics/signup", { replace: true });
+          }
         } else if (userType === "user") {
           navigate("/users/UserSignup.jsx", { replace: true });
         } else {
@@ -52,6 +79,9 @@ export default function Verify() {
       } else {
         setError("Session creation failed. Please try again.");
       }
+    } catch (err) {
+      console.error("OTP Verification failed:", err.message);
+      setError("Verification failed: " + (err.message || "Unknown error"));
     } finally {
       setIsLoading(false);
     }

@@ -14,9 +14,11 @@ import {
 } from "chart.js";
 import { databases } from "../../lib/appwrite"; // ✅ Appwrite SDK
 import { ID } from "appwrite"; // ✅ For unique document IDs
+import { Query } from "appwrite"; // Import Query for advanced queries
 
 const dbId = import.meta.env.VITE_APPWRITE_DATABASE_ID;
 const reviewCollectionId = import.meta.env.VITE_APPWRITE_USERREVIEW_ID;
+const clinicCollectionId = import.meta.env.VITE_APPWRITE_COLLECTION_ID;
 
 ChartJS.register(
   CategoryScale,
@@ -61,10 +63,9 @@ export default function UserGraf() {
   useEffect(() => {
     const fetchClinics = async () => {
       try {
-        const res = await databases.listDocuments(
-          dbId,
-          import.meta.env.VITE_APPWRITE_CLINIC_COLLECTION_ID // set this in your .env
-        );
+        const res = await databases.listDocuments(dbId, clinicCollectionId, [
+          Query.limit(100),
+        ]); // Use the correct collection ID
         setClinics(res.documents);
       } catch (err) {
         console.error("❌ Error fetching clinics:", err);
@@ -90,7 +91,7 @@ export default function UserGraf() {
             clinicId: selectedClinicId,
             review: textReview,
             overall_rating: rating,
-            theropy_rating: rating, // assuming therapy rating = overall rating
+            theropy_rating: rating,
           }
         );
 

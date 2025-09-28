@@ -1,7 +1,7 @@
-// src/pages/clinics/ClinicSignup.jsx
 import React, { useState, useEffect } from "react";
 import { databases, ID, account } from "../../lib/appwrite";
 import DoctorDashboard from "./doctordashbord";
+import { useNavigate } from "react-router-dom";
 
 export default function ClinicSignup() {
   const dbId = import.meta.env.VITE_APPWRITE_DATABASE_ID;
@@ -9,6 +9,7 @@ export default function ClinicSignup() {
 
   const [showDashboard, setShowDashboard] = useState(false);
   const [loading, setLoading] = useState(true); // while checking session
+  const navigate = useNavigate();
 
   // 🌿 Ayurvedic Inspired Styles
   const containerStyle = {
@@ -63,11 +64,7 @@ export default function ClinicSignup() {
     transition: "all 0.2s ease",
   };
 
-  const listStyle = {
-    listStyle: "none",
-    padding: 0,
-    marginTop: "1rem",
-  };
+  const listStyle = { listStyle: "none", padding: 0, marginTop: "1rem" };
 
   const liStyle = {
     background: "#FFFDE7",
@@ -79,6 +76,7 @@ export default function ClinicSignup() {
     fontWeight: "500",
   };
 
+  // Form state
   const [clinicName, setClinicName] = useState("");
   const [mobileNumber, setMobileNumber] = useState("");
   const [location, setLocation] = useState("");
@@ -94,18 +92,17 @@ export default function ClinicSignup() {
     async function checkSession() {
       try {
         const session = await account.get();
-        if (session) {
-          console.log("User logged in:", session);
+        if (session && window.localStorage.getItem("clinicId")) {
           setShowDashboard(true);
         }
       } catch (err) {
-        console.log("No active session:", err.message);
+        navigate("/signin");
       } finally {
         setLoading(false);
       }
     }
     checkSession();
-  }, []);
+  }, [navigate]);
 
   // Ask for device location 🌍
   useEffect(() => {
@@ -157,28 +154,28 @@ export default function ClinicSignup() {
       return;
     }
 
-    if (mobileNumber.length < 1 || mobileNumber.length > 20) {
-      alert("Mobile number must be 1-20 characters.");
-      return;
-    }
-
     try {
-      // Create a boolean map for available-timeslots
-      const availableTimeSlots = {};
-      slotsList.forEach((slot) => {
-        availableTimeSlots[slot] = true;
-      });
+      // 'available-timeslots' must be a boolean (see schema)
+      const availableTimeSlots = true; // or set logic as needed
 
+      // Get current user ID for ownerId
+      const session = await account.get();
+      const ownerId = session?.$id || session?.userId || session?.uid;
+
+      // Use correct Appwrite attribute names (see schema)
       const payload = {
         clinic_name: clinicName,
         location: location,
         latitude: coords.latitude,
         longitude: coords.longitude,
         "time-slots": slotsList,
-        "available-timeslots": availableTimeSlots,
         therapy: therapies,
         "clinic-mobilenumber": mobileNumber,
+        "available-timeslots": availableTimeSlots,
+        ownerId: ownerId,
       };
+
+      console.log("Payload being sent:", payload);
 
       const res = await databases.createDocument(
         dbId,
@@ -191,36 +188,54 @@ export default function ClinicSignup() {
         window.localStorage.setItem("clinicId", res.$id);
       }
 
-      console.log("Clinic saved:", res);
       alert("🌿 Clinic signup successful!");
-      setClinicName("");
-      setMobileNumber("");
-      setLocation("");
-      setTherapies([]);
-      setSlotsList([]);
-      setCoords(null);
-      setLocationPermission(null);
-      setNewTherapy("");
-      setDoctorSlots("");
       setShowDashboard(true);
     } catch (err) {
       console.error("Error saving clinic:", err);
-      alert("⚠️ Failed to save clinic. " + (err?.message || ""));
+      alert(
+        "⚠️ Failed to save clinic. Check console for details. " +
+          (err?.message || "")
+      );
     }
   }
 
-  // ⏳ Loading state while checking session
-  if (loading) {
-    return <div>Checking session...</div>;
-  }
+  if (loading) return <div>Checking session...</div>;
 
-  if (showDashboard) {
-    return <DoctorDashboard />;
-  }
+  // Logout handler
+  const handleLogout = async () => {
+    try {
+      await account.deleteSession("current");
+      window.localStorage.removeItem("clinicId");
+      navigate("/signin");
+    } catch (err) {
+      alert("Logout failed. Try again.");
+    }
+  };
 
-  return (
+  return showDashboard ? (
+    <DoctorDashboard />
+  ) : (
     <div style={containerStyle}>
-      <h2 style={headingStyle}>🌸 Ayurvedic Clinic Signup</h2>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <h2 style={headingStyle}>🌸 Ayurvedic Clinic Signup</h2>
+        <button
+          onClick={handleLogout}
+          style={{
+            ...buttonStyle,
+            background: "#B71C1C",
+            marginLeft: 0,
+            marginBottom: 0,
+          }}
+        >
+          🚪 Logout
+        </button>
+      </div>
 
       {coords && (
         <div
@@ -250,6 +265,7 @@ export default function ClinicSignup() {
             required
           />
         </div>
+
         <div>
           <label style={labelStyle}>📱 Mobile Number</label>
           <input
@@ -270,6 +286,7 @@ export default function ClinicSignup() {
             onChange={(e) => setLocation(e.target.value)}
             style={inputStyle}
             placeholder="Enter clinic address"
+            required
           />
         </div>
 
@@ -301,7 +318,7 @@ export default function ClinicSignup() {
             value={doctorSlots}
             onChange={(e) => setDoctorSlots(e.target.value)}
             style={inputStyle}
-            placeholder="e.g. 10:00 AM - 12:00 PM, 2:00 PM - 5:00 PM"
+            placeholder="e.g. 10:00 AM, 11:00 AM, 2:00 PM"
           />
           <button type="button" onClick={addSlot} style={buttonStyle}>
             ➕ Add

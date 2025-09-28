@@ -4,6 +4,8 @@ import Verify from "./pages/Verify";
 import UserSignup from "./pages/users/UserSignup";
 import ClinicSignup from "./pages/clinics/ClinicSignup";
 
+import DoctorDashboard from "./pages/clinics/doctordashbord";
+
 const router = createBrowserRouter([
   {
     path: "/signin",
@@ -18,8 +20,16 @@ const router = createBrowserRouter([
     element: <UserSignup />,
   },
   {
+    path: "/users/UserSignup",
+    element: <UserSignup />,
+  },
+  {
     path: "/clinics/signup",
     element: <ClinicSignup />,
+  },
+  {
+    path: "/clinics/doctordashbord",
+    element: <DoctorDashboard />,
   },
 ]);
 

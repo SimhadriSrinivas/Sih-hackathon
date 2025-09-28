@@ -1,24 +1,25 @@
-// src/pages/doctors/DoctorDashboard.jsx
 import React, { useEffect, useState } from "react";
 import { databases } from "../../lib/appwrite";
-import { Query } from "appwrite";
+import { Query, ID } from "appwrite";
 
+// ✅ Environment variables
 const dbId = import.meta.env.VITE_APPWRITE_DATABASE_ID;
 const clinicCollectionId = import.meta.env.VITE_APPWRITE_COLLECTION_ID;
-const appointmentCollectionId = import.meta.env
-  .VITE_APPWRITE_APPOINTMENT_COLLECTION_ID;
+const appointmentCollectionId =
+  import.meta.env.VITE_APPWRITE_APPOINTMENT_COLLECTION_ID;
 const reviewCollectionId = import.meta.env.VITE_APPWRITE_USERREVIEW_ID;
 
+// ✅ Get clinicId from localStorage
 function getClinicId() {
   return window.localStorage.getItem("clinicId") || "";
 }
 
-export default function DoctorDashboard(props) {
-  const clinicId = props.clinicId || getClinicId();
+export default function DoctorDashboard({ clinicId: propClinicId }) {
+  const clinicId = propClinicId || getClinicId();
 
   const [clinic, setClinic] = useState(null);
-  const [timeSlots, setTimeSlots] = useState([]); // just array of slots
-  const [selectedSlots, setSelectedSlots] = useState([]); // store red slots
+  const [timeSlots, setTimeSlots] = useState([]);
+  const [selectedSlots, setSelectedSlots] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,58 +27,73 @@ export default function DoctorDashboard(props) {
   // ✅ Fetch clinic details
   const fetchClinic = async () => {
     try {
-      if (!clinicId) return;
-      if (!clinicCollectionId) throw new Error("Missing clinic collectionId");
+      if (!clinicId || !clinicCollectionId) return;
 
       const clinicDoc = await databases.getDocument(
         dbId,
         clinicCollectionId,
         clinicId
       );
+
       setClinic(clinicDoc);
       setTimeSlots(clinicDoc["time-slots"] || []);
     } catch (err) {
-      console.error("❌ Error fetching clinic details:", err);
+      console.error("❌ Error fetching clinic details:", err.message);
     }
   };
 
   // ✅ Fetch appointments
   const fetchAppointments = async () => {
     try {
-      if (!clinicId) return;
-      if (!appointmentCollectionId)
-        throw new Error("Missing appointment collectionId");
+      if (!clinicId || !appointmentCollectionId) return;
 
-      const res = await databases.listDocuments(dbId, appointmentCollectionId, [
-        Query.equal("clinicId", clinicId),
-      ]);
-      setAppointments(res.documents);
+      const res = await databases.listDocuments(
+        dbId,
+        appointmentCollectionId,
+        [Query.equal("clinicId", clinicId)]
+      );
+
+      setAppointments(res.documents || []);
     } catch (err) {
-      console.error("❌ Error fetching appointments:", err);
+      console.error("❌ Error fetching appointments:", err.message);
     }
   };
 
   // ✅ Fetch reviews
   const fetchReviews = async () => {
     try {
-      if (!clinicId) return;
-      if (!reviewCollectionId) throw new Error("Missing review collectionId");
+      if (!clinicId || !reviewCollectionId) return;
 
       const res = await databases.listDocuments(dbId, reviewCollectionId, [
         Query.equal("clinicId", clinicId),
       ]);
-      setReviews(res.documents);
+
+      setReviews(res.documents || []);
     } catch (err) {
-      console.error("❌ Error fetching reviews:", err);
+      console.error("❌ Error fetching reviews:", err.message);
     }
   };
 
-  // ✅ Toggle slot selection (green ↔ red)
+  // ✅ Toggle slot selection
   const toggleSlot = (slot) => {
-    if (selectedSlots.includes(slot)) {
-      setSelectedSlots(selectedSlots.filter((s) => s !== slot));
-    } else {
-      setSelectedSlots([...selectedSlots, slot]);
+    setSelectedSlots((prev) =>
+      prev.includes(slot) ? prev.filter((s) => s !== slot) : [...prev, slot]
+    );
+  };
+
+  // ✅ Add new slot to DB
+  const addNewSlotToDB = async (newSlot) => {
+    if (!newSlot || !clinicId) return;
+    const updatedSlots = [...timeSlots, newSlot];
+    try {
+      await databases.updateDocument(dbId, clinicCollectionId, clinicId, {
+        "time-slots": updatedSlots,
+      });
+      setTimeSlots(updatedSlots);
+      alert(`✅ Slot "${newSlot}" added!`);
+    } catch (err) {
+      console.error("❌ Error adding new slot:", err.message);
+      alert("⚠️ Failed to add slot. Try again.");
     }
   };
 
@@ -94,7 +110,7 @@ export default function DoctorDashboard(props) {
     fetchData();
   }, [clinicId]);
 
-  // ✅ Style
+  // ✅ Style for slots
   const slotButtonStyle = (slot) => ({
     padding: "0.8rem 1.2rem",
     margin: "0.5rem",
@@ -102,7 +118,7 @@ export default function DoctorDashboard(props) {
     border: "none",
     fontWeight: "bold",
     cursor: "pointer",
-    background: selectedSlots.includes(slot) ? "#C62828" : "#2E7D32", // red if selected else green
+    background: selectedSlots.includes(slot) ? "#C62828" : "#2E7D32",
     color: "#fff",
     boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
     transition: "all 0.2s ease",
@@ -159,19 +175,22 @@ export default function DoctorDashboard(props) {
               }}
             >
               <h3 style={{ color: "#2E7D32", marginBottom: "0.7rem" }}>
-                {clinic.clinic_name}
+                {clinic.clinic_name || "Unnamed Clinic"}
               </h3>
               <div style={{ color: "#4E342E", marginBottom: "0.5rem" }}>
-                📱 Mobile: {clinic["clinic-mobilenumber"]}
+                📱 Mobile: {clinic["clinic-mobilenumber"] || "N/A"}
               </div>
               <div style={{ color: "#4E342E", marginBottom: "0.5rem" }}>
-                📌 Address: {clinic.location}
+                📌 Address: {clinic.location || "N/A"}
               </div>
               <div style={{ color: "#4E342E", marginBottom: "0.5rem" }}>
-                🌍 Lat: {clinic.latitude}, Lng: {clinic.longitude}
+                🌍 Lat: {clinic.latitude || "?"}, Lng: {clinic.longitude || "?"}
               </div>
               <div style={{ color: "#4E342E", marginBottom: "0.5rem" }}>
-                🌿 Therapies: {clinic.therapy?.join(", ")}
+                🌿 Therapies:{" "}
+                {clinic.therapy?.length > 0
+                  ? clinic.therapy.join(", ")
+                  : "No therapies listed"}
               </div>
             </div>
           )}
@@ -198,10 +217,10 @@ export default function DoctorDashboard(props) {
             </div>
             <button
               onClick={() => {
-                const newSlot = window.prompt("Enter new slot (e.g. 10:00 AM)");
-                if (newSlot) {
-                  setTimeSlots([...timeSlots, newSlot]);
-                }
+                const newSlot = window.prompt(
+                  "Enter new slot (e.g. 10:00 AM - 12:00 PM)"
+                );
+                if (newSlot) addNewSlotToDB(newSlot);
               }}
               style={{
                 marginTop: "1rem",
@@ -228,7 +247,8 @@ export default function DoctorDashboard(props) {
               <ul>
                 {appointments.map((appt) => (
                   <li key={appt.$id}>
-                    <strong>{appt.userName}</strong> – {appt.slot} – {appt.date}
+                    <strong>{appt.userName || "Unknown User"}</strong> –{" "}
+                    {appt.slot || "No Slot"} – {appt.date || "No Date"}
                   </li>
                 ))}
               </ul>
@@ -244,8 +264,9 @@ export default function DoctorDashboard(props) {
               <ul>
                 {reviews.map((rev) => (
                   <li key={rev.$id}>
-                    <strong>{rev.userName}</strong>: {rev.comment} ⭐
-                    {rev.rating}
+                    <strong>{rev.userName || "Anonymous"}</strong>:{" "}
+                    {rev.comment || "No comment"} ⭐
+                    {rev.rating || "N/A"}
                   </li>
                 ))}
               </ul>
